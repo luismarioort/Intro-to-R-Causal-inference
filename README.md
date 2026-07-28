@@ -18,9 +18,23 @@
 
 ## Part 3: Difference-in-Differences
 ---------------------------------------------------
+- Panel data
+- 2x2 Differences-in-Differences
+- Two-Way-Fixed-Effects
+- Event-study plots
+- Continuous treatment
+- Extensions
 
 ## Part 4: Instrumental Variables
 ---------------------------------------------------
+- LATE
+- Assumption testing
+- 2SLS estimation
 
 ## Part 5: Regression discontinuity
 ---------------------------------------------------
+- LATE (again)
+- Assumption testing: McCrary and CCT
+- Plots
+- Optimal bandwith
+- Sample split
