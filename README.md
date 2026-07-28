@@ -16,7 +16,7 @@
 - Stratified randomization
 - Cluster randomization
 
-## Part 3: Difference-in-Differences
+## Part 3: Difference-in-differences
 ---------------------------------------------------
 - Panel data
 - 2x2 Differences-in-Differences
@@ -25,7 +25,7 @@
 - Continuous treatment
 - Extensions
 
-## Part 4: Instrumental Variables
+## Part 4: Instrumental variables
 ---------------------------------------------------
 - LATE
 - Assumption testing
