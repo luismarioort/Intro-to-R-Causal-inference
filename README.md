@@ -23,7 +23,7 @@
 - Two-Way-Fixed-Effects
 - Event-study plots
 - Continuous treatment
-- Extensions
+- Staggered intervention and modern estimators
 
 ## Part 4: Instrumental variables
 ---------------------------------------------------
