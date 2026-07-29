@@ -3,7 +3,7 @@
 ## Part 1: Introduction to R
 - Data and cleaning
 - Plots and tables
-- Functions
+- Functions and loops
 
 ## Part 2: Experiments
 - Fundamental problem of causal inference
