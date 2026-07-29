@@ -1,7 +1,6 @@
 # Introduction to R for Causal-inference
 ---------------------------------------------------
 ## Part 1: Introduction to R
----------------------------------------------------
 - Data and cleaning
 - Plots and tables
 - Functions
