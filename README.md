@@ -1,5 +1,7 @@
 # Introduction to R for Causal-inference
+
 Materials for the course Political Economy (CSO-15041) imparted by professor Horacio Larreguy at ITAM (Fall 2026).
+
 ---------------------------------------------------
 ## Part 1: Introduction to R
 - Data and cleaning
