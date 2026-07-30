@@ -1,0 +1,153 @@
+---
+title: "RDD"
+author: "Eduardo Zago and Manuel Quintero"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+# DiD
+
+```{r}
+# Instalamos los paquete necesarios
+list.of.packages <- c("stargazer", "tidyverse", 'rdrobust', "haven", "fixest", 
+                      "varhandle", "lfe", 'rddtools', 'rddensity')
+
+# Verificamos aquellos paquetes que no han sido instalados
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+
+# Los instalamos y cargamos todos a la vez
+if(length(new.packages)) install.packages(new.packages) # verificamos que exista al menos un paquete en new.packages y lo instalamos
+lapply(list.of.packages, library, character.only = TRUE) # Función en R que aplica la función library a todos los elementos en list.of.packages 
+
+```
+
+
+```{r}
+set.seed(4) # Semilla  aleatoria
+# Generamos los datos
+x <- runif(100, -2, 2)
+y <- 1 +  x + 5*(x >= 0) + rnorm(100,0,1)
+z <- ifelse(x > 0, 1, 0) # creamos la variable indicadora
+# Concatenamos los vectores
+rd_data <- cbind.data.frame(y,x,z)
+```
+
+```{r}
+# Test de McCrary
+library(rdd)
+DCdensity(rd_data$x , 0, plot = F)
+```
+
+```{r}
+# Test de McCrary (gráfica)
+DCdensity(rd_data$x , 0, plot = T)
+```
+
+
+```{r}
+# Now using Calonico:
+
+rdbwdensity(rd_data$x, c = 0, p = 1)
+rdd2 <- rddensity(rd_data$x, c=0, p=1)
+summary(rdd2)
+```
+
+```{r}
+set.seed(42) # fix the seed for simulating critical values
+plot2 <- rdplotdensity(rdd2, x, plotRange = c(-2, 2), plotN = 25, 
+                       CIuniform = TRUE)
+```
+
+
+```{r}
+# Forma 1: utilizando la función lm():
+rd_data_filter <- rd_data |> filter(x < 1 & x > -1)
+rd1 <- felm(y ~ z + z*x , data = rd_data_filter) # el punto de quiebre es 0
+rd1$coefficients
+```
+
+```{r}
+ 
+ggplot(rd_data_filter, aes(x, y, color = factor(z))) +
+                geom_point() + 
+                geom_smooth(size = 1.5) +
+                geom_vline(xintercept=0, linetype="longdash") +
+                theme_bw() +
+                xlab("x") +
+                ylab("y") + 
+                scale_color_discrete(name = "T")
+```
+
+```{r}
+# Sin optimal bandwidth
+rd_data1 <- rdd_data(rd_data_filter$y, rd_data_filter$x, cutpoint = 0)
+
+rd2 <- rdd_reg_lm(rdd_object = rd_data1, slope = "separate", bw = NULL)
+rd2$coefficients
+```
+
+```{r}
+plot(rd_data1, col = c("coral"), xlab = "x", ylab = "y") 
+```
+
+```{r}
+plot(rd2, col = "coral",  xlab = "x", ylab = "y")
+```
+
+
+```{r}
+rd3_bw <- rdd_reg_lm(rdd_object = rd_data1, slope = "separate", 
+                bw = rdd_bw_ik(rd_data1, kernel = "Triangular"))
+    
+rd3_bw$coefficients
+```
+
+```{r}
+# RD con optimal bandwidth usando Calonico et al. 2015
+
+rdbwselect(rd_data$y, rd_data$x, c = 0, kernel = 'triangular', 
+           bwselect = 'mserd', vce = 'nn')
+
+reg_cct = rdrobust(rd_data$y, rd_data$x, all=T)
+```
+
+```{r}
+summary(reg_cct)
+```
+
+```{r}
+rdplot(rd_data$y, rd_data$x,
+           x.lab="Running Variable (x)",
+           y.lab="Dependent Variable (y)", title = "")
+```
+
+```{r}
+set.seed(5) # Semilla  aleatoria
+# Generamos los datos
+x <- runif(100, -2, 2)
+y <- 1 +  x + 8*(x >= 0) + rnorm(100,0,1)
+z <- ifelse(x > 0, 1, 0) # creamos la variable indicadora
+# Concatenamos los vectores
+rd_data_post <- cbind.data.frame(y,x,z) |> mutate(post = 1)
+rd_data <- rd_data |> mutate(post = 0)
+
+final <- rbind(rd_data, rd_data_post)
+```
+
+```{r}
+final_pre <- final |> filter(post == 0)
+final_post <- final |> filter(post == 1) 
+
+reg_pre = rdrobust(final_pre$y, final_pre$x, all=T)
+summary(reg_pre)
+```
+
+```{r}
+reg_post = rdrobust(final_post$y, final_post$x, all=T)
+summary(reg_post)
+```
+

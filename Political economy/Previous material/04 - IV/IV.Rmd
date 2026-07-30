@@ -1,0 +1,71 @@
+---
+title: 'IV'
+author: "Eduardo Zago"
+date: "2022-08-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Instalamos los paquete necesarios
+list.of.packages <- c("stargazer", "tidyverse", "haven", "fixest",  "lfe")
+
+# Verificamos aquellos paquetes que no han sido instalados
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+
+# Los instalamos y cargamos todos a la vez
+if(length(new.packages)) install.packages(new.packages) # verificamos que exista al menos un paquete en new.packages y lo instalamos
+lapply(list.of.packages, library, character.only = TRUE) # Función en R que aplica la función library a todos los elementos en list.of.packages 
+```
+
+```{r}
+set.seed(32)
+salarios <- c(10, 10, 11, 13, 15, 18, 20, 20, 19, 21)
+educacion <- c(1,1,1,2,1,2,3,3,3,3)
+educacion_padres <- educacion - sample(c(0,1,2), size = 10, replace = T, prob = c(0.7,0.2,0.1))
+datos_iv <- cbind.data.frame(salarios, educacion, educacion_padres)
+```
+
+```{r}
+fs <- felm(educacion ~ educacion_padres, data = datos_iv) # first stage
+
+datos_iv$y_hat <- fs$fitted.values
+
+ss <- felm(salarios ~ y_hat, data = datos_iv)
+
+ss$coefficients
+```
+
+```{r}
+rf <- felm(salarios ~ educacion_padres) # reduced form
+# Sacamos el cociente de las estimaciones
+b_iv <- rf$coefficients[2]/fs$coefficients[2]
+```
+
+```{r}
+reg_iv = felm(salarios ~ 1 | 0 | (educacion ~ educacion_padres), 
+                    data =datos_iv ) 
+```
+
+```{r}
+tableiv <- stargazer(fs, rf, ss, reg_iv,
+                      header = FALSE,
+                      font.size = "scriptsize",
+                      dep.var.labels.include = FALSE,
+                      table.placement = "H",
+                      omit = c("Constant"),
+                      column.labels = c("First Stage", "Reduced Form",
+                                        "2SLS", 'IV (felm)'),
+                      covariate.labels = c("Instrument", "IV Estimate", "IV Estimate"),
+                      omit.stat = c("f", "ser","adj.rsq"),
+                      title = "Estimación de IV",
+                      type = "latex")
+```
+
+```{r}
+reg_iv[["stage1"]][["iv1fstat"]][["educacion"]][["F"]]
+```
+

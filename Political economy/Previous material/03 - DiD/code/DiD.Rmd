@@ -1,0 +1,652 @@
+---
+title: "Tutorial Cuasi-Experimentales"
+author: "Eduardo Zago"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F)
+```
+
+# DiD
+
+```{r}
+# Instalamos los paquete necesarios
+list.of.packages <- c("stargazer", "tidyverse", "plm", "haven", "fixest", 
+                      "varhandle", "lfe")
+
+# Verificamos aquellos paquetes que no han sido instalados
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+
+# Los instalamos y cargamos todos a la vez
+if(length(new.packages)) install.packages(new.packages) # verificamos que exista al menos un paquete en new.packages y lo instalamos
+lapply(list.of.packages, library, character.only = TRUE) # Función en R que aplica la función library a todos los elementos en list.of.packages 
+
+```
+
+```{r}
+# Generamos datos aleatoriamente
+
+set.seed(32) # Semilla aleatoria
+
+error <- runif(80, min=0, max=1)
+
+# Variable de Salario sin agregar efectos de tratamiento, de anticipación, etc
+control <- floor(runif(10, min=10, max=20)) 
+control <- rep(control, 8)
+
+# Variable de tiempo (T=10)
+time <- c(1:10) 
+time <- rep(time, 8)
+
+# Variable que indica el tratamiento:
+treatment <- c(rep(0,10), rep(1,10), rep(0,10), rep(1,10),
+               rep(0,10), rep(1,10), rep(0,10), rep(1,10))
+
+# Variable que distingue entre unidades (n=8)
+
+# Generamos la variable para distinguir entre individuos
+unidades <- c(rep(1, 10), rep(2, 10), rep(3, 10), rep(4, 10),
+              rep(5, 10), rep(6, 10), rep(7, 10), rep(8, 10))
+
+# Variable indicadora despues de tratamiento
+post <- c(rep(0,5), rep(1,5)) 
+post <- rep(post, 8)
+
+# Observen la diferencia entre estas dos variables, una adelanta el tratamiento un periodo
+post_pretrend <- c(rep(0,4), rep(1,6)) 
+post_pretrend <- rep(post_pretrend, 8)
+
+# Veamos como se ve la base:
+dd_data <- cbind.data.frame(unidades, time, post, post_pretrend, treatment) 
+
+head(dd_data, 15)
+```
+
+```{r}
+# Ya que tenemos esto, podemos observar como simular nuestra variable dependiente
+
+# Tendencias paralelas
+wage <- control + 2.3 * post_pretrend * treatment + 2 * post_pretrend * treatment * (time-6) + error
+
+# No tendencias paralelas
+wage_pretrend <- control + 3 * post_pretrend * treatment + 2 * post_pretrend * treatment *(time-6) + error
+
+# Indicadora de tratamiento
+
+dd_data <- cbind.data.frame(unidades, time, post, treatment, wage, wage_pretrend) 
+colnames(dd_data) <- c("unidades", "time", "post", "treatment", "wage", "wage_pretrend")
+
+head(dd_data, 20)
+```
+## Análisis Gráfico:
+
+```{r}
+# Gráfica:
+# 1. Preparamos los datos para graficar. Nos gustaría tener una variable de tiempo en el 
+# eje x, que sea 0 en el tiempo de inicio del programa y +1:+4 para los posteriores y -1:-4 
+# para los de antes. 
+
+dd_data <- dd_data %>% mutate(time_dd = time - 6)
+
+# 2. Agregamos las variables usando la media para tener una observación para cada periodo/grupo
+
+dd_graph <- dd_data %>% group_by(treatment, time_dd) %>% 
+     summarise(wage_p_mean = mean(wage_pretrend),
+               wage_mean = mean(wage)) %>% ungroup()
+
+# 3. Separamos en dos datasets para graficar:
+
+graph_treat <- dd_graph %>% filter(treatment == 1)
+graph_control <- dd_graph %>% filter(treatment == 0)
+
+head(graph_treat, 10)
+head(graph_control, 10)
+```
+
+```{r}
+# 4. Graficamos:
+
+stat<- ggplot(graph_treat, aes(time_dd, wage_p_mean)) + 
+     geom_line(aes(color="Treated"), size = .6) +
+     geom_line(data = graph_control, aes(color = "Control"), size = .6) +
+     labs(color="", x = "Days from T", y = "Wage") + 
+     theme_bw()+ 
+     scale_color_manual(values=c("black", "darkred")) +
+     geom_vline(xintercept=0, color="black", linetype="dotted") +
+     scale_x_continuous(breaks=seq(-5,4,1)) +
+     ggtitle("Wage evolution through time", subtitle = "Differential Pre-Trends")
+stat
+# 5. Guardamos imagen 
+# ggsave(stat, filename = 'stat_dd_pre.pdf', device = cairo_pdf, dpi = 300, width = 12, height = 10, units = 'cm')
+
+stat2<- ggplot(graph_treat, aes(time_dd, wage_mean)) + 
+  geom_line(aes(color="Treated"), size = .6) +
+  geom_line(data = graph_control, aes(color = "Control"), size = .6) +
+  labs(color="", x = "Days from T", y = "Wage") + 
+  theme_bw()+ 
+  scale_color_manual(values=c("black", "darkred")) +
+  geom_vline(xintercept=0, color="black", linetype="dotted") +
+  scale_x_continuous(breaks=seq(-5,4,1)) +
+  ggtitle("Wage evolution through time", subtitle = "Non-Differential Pre-Trends")
+stat2
+# ggsave(stat2, filename = 'stat_dd_no_pre.pdf', device = cairo_pdf, dpi = 300, width = 12, height = 10, units = 'cm')
+```
+
+## Análisis Econometrico:
+
+Regresiones para estimar el DiD Estimate:
+
+```{r}
+# Two way Fixed Effects
+
+# Generamos la variable de interacci?n entre treatment y post
+dd_data <- dd_data %>% mutate(treat_post = treatment*post)
+
+# Forma antigua de correr DiD
+reg1 <- felm(wage ~ treat_post + treatment + post | 0 | 0| unidades, data = dd_data)
+
+# TWFE
+reg2 <- felm(wage ~ treat_post | unidades + time | 0 | unidades, 
+                  data = dd_data)
+
+summary(reg1)
+summary(reg2)
+```
+
+```{r}
+reg2$pval
+```
+
+
+```{r}
+# Podemos generar una tabla bonita usando estas dos regresiones:
+tabldedd <- stargazer(reg1, reg2,
+                      header = FALSE,
+                      font.size = "scriptsize",
+                      dep.var.labels.include = FALSE,
+                      table.placement = "H",
+                      omit = c("Constant", "unidades", "time"),
+                      column.labels = c("Canonic", "TWFE"),
+                      covariate.labels = c("DiD Estimate", "Treatment", "Post"),
+                      omit.stat = c("f", "ser","adj.rsq"),
+                      add.lines = list(c("Unit Fixed Effects", "No", "Yes"),
+                                       c("Time Fixed Effects", "No", "Yes")),
+                      title = "DiD",
+                      type = "latex")
+
+note.latex <- "\\multicolumn{3}{c} {\\parbox[t]{7cm}{ \\textit{Notes:} 
+Standard errors are clustered at the unit level. * denotes p$<$0.1, ** denotes p$<$0.05, and *** denotes p$<$0.01.}} \\\\"
+tabldedd[grepl("Note", tabldedd)] <- note.latex
+
+cat(tabldedd)
+```
+
+## Colinearity:
+
+```{r}
+# Collinearity e importancia de agregar efectos fijos:
+reg3 <- lfe::felm(wage ~ treat_post + treatment + post | unidades + time, 
+                  data = dd_data)
+
+summary(reg3)
+```
+## Event Study:
+
+```{r}
+dd_data <- dd_data %>% group_by(unidades) %>% mutate(event_time = time[post > 0][1])
+
+# Grupo de control a 0
+dd_data$event_time[dd_data$treatment == 0] <- 0
+
+# Creamos la variable tte
+dd_data <- dd_data %>% group_by(unidades) %>% 
+  mutate(time_to_event = ifelse(treatment == 1, time - event_time, 0))
+
+view(dd_data)
+
+```
+
+La función que usaremos de feols, solo toma valores positivos, por lo que tendremos que hacer un mapeo.
+
+
+```{r}
+# Corremos la regresión del event study
+#dd_plot_reg <- feols(wage_pretrend ~ i(shifted_tte, treatment, ref = reference) | unidades + time, cluster = "unidades", data = dd)
+
+dd_plot_reg <- feols(wage ~ i(time_to_event, treatment, ref = -1) | 
+                       unidades + time, cluster = "unidades", data = dd_data)
+
+ip <- iplot(dd_plot_reg)
+
+dd_plot_reg2 <- feols(wage_pretrend ~ i(time_to_event, treatment, ref = -1) | 
+                       unidades + time, cluster = "unidades", data = dd_data)
+
+ip2 <- iplot(dd_plot_reg2)
+
+```
+
+
+```{r}
+# Plot personalizado (para feols y felm, para plm habría que calcular los se como arriba en el leads and lags)
+coefs = c(dd_plot_reg$coefficients[1:4], 
+          0, 
+          dd_plot_reg$coefficients[(5): length(dd_plot_reg$coefficients)])
+
+se = c(dd_plot_reg$se[1:4], 
+       0, 
+       dd_plot_reg$se[(5):length(dd_plot_reg$se)]) 
+
+# Concatenamos las variables
+datos_did <- data.frame(coeficientes = coefs, ses = se, time = -5:4, 
+                        type = rep(1:3, c(4,1,5)))
+datos_did$time <- factor(datos_did$time)
+
+head(datos_did, 10)
+```
+
+
+```{r}
+# Grafica DID
+colors <- c("#000000", "#0072B2","#D55E00")
+DID_plot <- ggplot(data = datos_did, mapping = aes(y = coeficientes, x = time)) +
+     geom_point(aes(colour = factor(type)), size = 2) + 
+     geom_errorbar(aes(ymin=(coeficientes-1.96*ses), ymax=(coeficientes+1.96*ses), colour = factor(type)), width=0.2) +
+     geom_hline(yintercept = 0, linetype="solid", color ="grey", 2) +
+     geom_vline(xintercept = 5,linetype="dashed", color ="red", 2) +
+     theme_bw() +
+     ylab("Valor estimado (95% IC)") + 
+     xlab("Años desde tratamiento") + 
+     scale_color_manual(name = "Periodo", values= colors) +
+     theme(legend.position = "none") 
+
+ggsave(DID_plot, filename = 'DD_NO_pre.pdf', device = cairo_pdf,
+       dpi = 300, width = 12, height = 10, units = 'cm') # Salvamos en pdf
+DID_plot
+
+```
+
+
+```{r}
+# Plot personalizado (para feols y felm, para plm habría que calcular los se como arriba en el leads and lags)
+coefs = c(dd_plot_reg2$coefficients[1:4], 
+          0, 
+          dd_plot_reg2$coefficients[(5): length(dd_plot_reg2$coefficients)])
+
+se = c(dd_plot_reg2$se[1:4], 
+       0, 
+       dd_plot_reg2$se[(5):length(dd_plot_reg2$se)]) 
+
+# Concatenamos las variables
+datos_did <- data.frame(coeficientes = coefs, ses = se, time = -5:4, 
+                        type = rep(1:3, c(4,1,5)))
+datos_did$time <- factor(datos_did$time)
+
+head(datos_did, 10)
+```
+
+```{r}
+colors <- c("#000000", "#0072B2","#D55E00")
+DID_plot1 <- ggplot(data = datos_did, mapping = aes(y = coeficientes, x = time)) +
+     geom_point(aes(colour = factor(type)), size = 2) + 
+     geom_errorbar(aes(ymin=(coeficientes-1.96*ses), ymax=(coeficientes+1.96*ses), colour = factor(type)), width=0.2) +
+     geom_hline(yintercept = 0, linetype="solid", color ="grey", 2) +
+     geom_vline(xintercept = 5,linetype="dashed", color ="red", 2) +
+     theme_bw() +
+     ylab("Valor estimado (95% IC)") + 
+     xlab("Años desde tratamiento") + 
+     scale_color_manual(name = "Periodo", values= colors) +
+     theme(legend.position = "none") 
+
+ggsave(DID_plot, filename = 'DD_pre.pdf', device = cairo_pdf,
+       dpi = 300, width = 12, height = 10, units = 'cm') # Salvamos en pdf
+DID_plot1
+```
+
+
+## Leads and Lags
+
+```{r}
+####################################### Leads and Lags
+
+# Creamos múltiples leads and lags
+dd <- pdata.frame(dd_data, index = c("unidades", "time")) # creamos formato pdata de plm, por facilidad
+dd <- cbind(dd, plm::lag(dd$treat_post, c(-2, -1, 1, 2))) # creamos lags and leads 
+dd <- as.data.frame(transform(dd)) # reveritmos el formato de pdata al formato original
+names(dd)[(length(dd) - 3):length(dd)] <- c("tratamiento_Lead_2", 
+                                            "tratamiento_Lead_1", "tratamiento_Lag_1", 
+                                            "tratamiento_Lag_2")
+
+# Revertimos los factores creados por plm
+dd <- unfactor(dd)
+
+# Cambiamos los valores NAs
+dd[dd$treatment == 0, c("tratamiento_Lead_2", 
+                        "tratamiento_Lead_1", "tratamiento_Lag_1", 
+                        "tratamiento_Lag_2")] <- 0
+```
+
+
+
+```{r}
+# Regresion Leads and Lags
+
+leads1 <- felm(wage_pretrend ~  treat_post + tratamiento_Lead_1 + tratamiento_Lead_2 + 
+                  tratamiento_Lag_1 + tratamiento_Lag_2 | 
+                  unidades + time | 0 | unidades, dd)
+
+
+leads2 <- felm(wage ~ treat_post + tratamiento_Lead_1  + tratamiento_Lead_2 + 
+                  tratamiento_Lag_1 + tratamiento_Lag_2  | 
+                 unidades + time | 0 | unidades, dd)
+
+
+# Tabla
+dep_var <- c("\\shortstack{Differential \\\\ Pre-Trend}", 
+             "\\shortstack{Non-Differential \\\\ Pre-Trend}")
+tablaleads <- stargazer(leads1, leads2,
+                        header = FALSE,
+                        font.size = "scriptsize",
+                        dep.var.labels.include = FALSE,
+                        table.placement = "H",
+                        omit = c("Constant", "unidades", "time", "tratamiento_Lag_1", 
+                                 "tratamiento_Lag_2"),
+                        column.labels = dep_var,
+                        covariate.labels = c("Treatment", "Lead 1", "Lead 2"),
+                        omit.stat = c("f", "ser","adj.rsq"),
+                        add.lines = list(c("Unit Fixed Effects", "Yes", "Yes"),
+                                       c("Time Fixed Effects", "Yes", "Yes")),
+                        title = "Leads and Lags",
+                        type = "latex")
+
+note.latex <- "\\multicolumn{3}{c} {\\parbox[t]{7cm}{ \\textit{Notes:} 
+Standard errors are clustered at the time level. Lag variables are included but not shown. 
+* denotes p$<$0.1, ** denotes p$<$0.05, and *** denotes p$<$0.01.}} \\\\"
+tablaleads[grepl("Note", tablaleads)] <- note.latex
+
+cat(tablaleads)
+```
+
+```{r}
+# Gr?fica Leads and Lags:
+
+# Preparamos los datos para graficar:
+#coeficientes <- coef(leads1)
+#se <- leads1_aux$se 
+
+coeficientes <- coef(leads2)
+se <- leads2$se 
+
+time <- c(0:2, -1, -2)
+
+# Concatenamos las variables
+datos <- data.frame(coeficientes= coeficientes, 
+                    ses = se, time = time, 
+                    type = rep(1:3, c(2,1,2)))
+datos$time <- factor(datos$time, levels = c(2,1,0,-1,-2))
+
+head(datos, 10)
+```
+
+```{r}
+# Grafica de leads and lags
+colors <- c("#000000", "#0072B2","#D55E00")
+leads_lags <- ggplot(data = datos, mapping = aes(y = coeficientes, x = time)) +
+     geom_point(aes(colour = factor(type)), size = 2) + 
+     geom_errorbar(aes(ymin=(coeficientes-1.96*ses), ymax=(coeficientes+1.96*ses), colour = factor(type)), width=0.2) +
+     ylim(c(-4,4)) +
+     geom_hline(yintercept = 0, linetype="solid", color ="grey", 2) +
+     geom_vline(xintercept = 2.5,linetype="dashed", color ="red", 2) +
+     theme_bw() +
+     ylab("Valor estimado (95% IC)") + 
+     xlab("Periodo") + 
+     scale_x_discrete(labels = c("t+2", "t+1", "tratamiento", "t-1", "t-2"), breaks = 2:-2) + 
+     scale_color_manual(name = "Periodo", values= colors) +
+     theme(legend.position = "none") 
+leads_lags
+```
+
+## Leads and Lags, sin perder observaciones:
+
+```{r}
+df_outcomes <- dd_data |> select(unidades, time, wage)
+
+df_tratamiento <- dd_data |> select(unidades, time, treat_post)
+```
+
+
+## Ambas bases tienen el mismo número de periodos, podemos suponer que no: tratamiento llega 2 periodos más que los outcomes
+
+```{r}
+df_2020 <- tibble(unidades = c(1:10), time = 11, treat_post = rep(c(0,1), 5))
+df_2021 <- tibble(unidades = c(1:10), time = 12, treat_post = rep(c(0,1), 5))
+
+df_tratamiento <- rbind(df_tratamiento, df_2020, df_2021)
+
+df_tratamiento <- df_tratamiento[order(df_tratamiento[,1], df_tratamiento[,2]),]
+```
+# Esto es un poco obvio, pero en sus proyectos no lo pueden hacer: solo si ya tienen su base con diferencias en periodos se puede hacer:
+
+# Noten que ya agregamos dos periodos mas de tratamiento.
+
+# Ahora, nos conviene entonces hacer los leads en esta base, usamos el código del tutorial, intentemos entenderlo mejor:
+
+# Todas las unidades fueron tratadas en algun momento por lo que no es necesario generar la variable treat, ni mandar esos a 0
+
+# Observen en particular como te regresa el frame la función:
+
+```{r}
+df_tratamiento <- pdata.frame(df_tratamiento, index = c("unidades","time")) # creamos formato pdata de plm, por facilidad a la base de TRATAMIENTO
+view(df_tratamiento)
+```
+
+# Las observaciones ya no estan númeradas del 1 al 200, si no que tienen un identificador único de unidad-tiempo:
+# Por eso se puede usar la función lead
+
+```{r}
+df_tratamiento <- cbind(df_tratamiento, plm::lead(df_tratamiento$treat_post, 
+                                                  c(1,2))) # creamos 2 leads, los unimos con cbind()
+df_tratamiento <- as.data.frame(transform(df_tratamiento)) # reveritmos el formato de pdata al formato original
+```
+
+
+# Noten que en esta base si perdemos observaciones, 2 por unidad al ser dos leads, sin embargo, podemos intuir que en la base final 
+# no se perderá ninguna, ya que solo llega al 2019
+
+```{r}
+names(df_tratamiento)[(length(df_tratamiento) - 1):length(df_tratamiento)] <- c("tratamiento_Lead_1", "tratamiento_Lead_2") 
+
+library(varhandle)
+df_tratamiento <- unfactor(df_tratamiento)
+```
+
+
+
+# Y podemos ya unir con los outcomes (claramente es un left_join con la de outcomes)
+
+```{r}
+df_outcomes <- df_outcomes |> left_join(df_tratamiento, 
+                                        by = c("unidades", "time"))
+
+sum(is.na(df_outcomes$tratamiento_Lead_1))
+
+sum(is.na(dd$tratamiento_Lead_1))
+```
+
+
+# Noten no perdemos ninguna observación, entonces podemos correr nuestro análisis:
+
+```{r}
+reg_leads <- felm(wage ~ treat_post + tratamiento_Lead_1 + tratamiento_Lead_2 |
+                    unidades + time | 0 | unidades, data = df_outcomes)
+
+reg_treat <- felm(wage ~ treat_post |
+                    unidades + time | 0 | unidades, data = df_outcomes)
+# Y lo visualizamos en stargazer:
+library(stargazer)
+
+tablaleads <- stargazer(reg_leads, reg_treat,
+                        omit = c("Constant", "unidades", "time"),
+                        covariate.labels = c("Tratamiento", "Adelanto 1", 
+                                             "Adelanto 2"),
+                        omit.stat = c("f", "ser","adj.rsq"),
+                        add.lines = list(c("Unit Fixed Effects", "Yes", "Yes"),
+                                         c("Time Fixed Effects", "Yes", "Yes")),
+                        title = "Leads and Lags",
+                        type = "latex")
+```
+
+
+## Tratamiento Continuo:
+
+```{r}
+# Read in de data
+data_continuo <- read_dta('../data/DID_data.dta')
+```
+
+El TWFE es el mismo:
+
+```{r}
+data_continuo <- data_continuo |> group_by(unidades) %>% 
+  mutate(treat = ifelse(any(tratamiento >= median(data_continuo$tratamiento)), 
+                        1 ,0))
+
+reg_did <- felm(outcome ~ tratamiento | unidades + tiempo | 0 | unidades, 
+                data = data_continuo)
+
+tabldedd <- stargazer(reg_did,
+                      header = FALSE,
+                      font.size = "scriptsize",
+                      dep.var.labels.include = FALSE,
+                      table.placement = "H",
+                      omit = c("Constant", "unidades", "time"),
+                      column.labels = c("TWFE"),
+                      covariate.labels = c("DiD Estimate"),
+                      omit.stat = c("f", "ser","adj.rsq"),
+                      add.lines = list(c("Unit Fixed Effects","Yes"),
+                                       c("Time Fixed Effects", "Yes")),
+                      title = "DiD Continuo",
+                      type = "latex")
+```
+
+## Leads y Lags:
+
+```{r}
+dd <- pdata.frame(data_continuo, index = c("unidades","tiempo")) 
+    dd <- cbind(dd, plm::lag(dd$tratamiento, c(-3:3)[-4]))
+    dd <- as.data.frame(transform(dd)) 
+    
+    names(dd)[(length(dd) - 5):length(dd)] <- 
+    c("tratamiento_Lead_3", "tratamiento_Lead_2", 
+        "tratamiento_Lead_1", "tratamiento_Lag_1",
+          "tratamiento_Lag_2", "tratamiento_Lag_3") 
+
+    dd <- unfactor(dd)
+
+    dd[dd$treat == 0, 
+    c("tratamiento_Lead_3", "tratamiento_Lead_2", 
+        "tratamiento_Lead_1", "tratamiento_Lag_1", 
+          "tratamiento_Lag_2", "tratamiento_Lag_3")] <- 0
+```
+
+```{r}
+reg1 <- felm(outcome ~ tratamiento + tratamiento_Lead_1 + tratamiento_Lead_2 + 
+               tratamiento_Lead_3  + tratamiento_Lag_1 + 
+               tratamiento_Lag_2 + tratamiento_Lag_3 | unidades + tiempo | 0 | 
+               unidades, dd)
+
+table_leads_lags <- stargazer(reg1, reg_did, header = FALSE, 
+                              font.size = "scriptsize", 
+                              dep.var.caption = "",
+                              label = "tab:tablaR", 
+                              dep.var.labels.include = FALSE, 
+                              table.placement = "H", 
+                              omit = c("Constant", "year", "unidades", "Lag"), 
+                              column.labels = c("Outcome", 'Outcome'), 
+                              covariate.labels = c("Tratamiento", 
+                                                   "Tratamiento Lead 1", 
+                                                   "Tratamiento Lead 2", 
+                                                   "Tratamiento Lead 3"), 
+                              omit.stat = c("f", "ser","adj.rsq"), 
+                              title = "Leads and lags", type = "latex")
+```
+
+
+## Event Study: Hay never treated units
+
+```{r}
+data_continuo <- data_continuo |> group_by(unidades) %>% 
+  mutate(treat = ifelse(any(tratamiento >= median(data_continuo$tratamiento)), 
+                        1 ,0))
+
+data_continuo <- data_continuo |> group_by(unidades) |> 
+  mutate(event_time = tiempo[tratamiento > 0][1]) |> ungroup()
+
+data_continuo <- data_continuo %>% group_by(unidades) %>%
+  mutate(time_to_event = tiempo - event_time) |> ungroup() |> 
+  mutate(time_to_event = ifelse(is.na(time_to_event) == T, 0, time_to_event))
+```
+
+```{r}
+dd_plot_cont <- feols(outcome ~ i(time_to_event, treat, ref = -1) | 
+                       unidades + tiempo, cluster = "unidades", 
+                      data = data_continuo)
+
+ip <- iplot(dd_plot_cont, 
+      xlab = 'Time to treatment',
+      main = 'Event Study Continuo') 
+```
+
+## Leads y Lags:
+
+```{r}
+dd <- pdata.frame(data_continuo, index = c("unidades","tiempo")) 
+    dd <- cbind(dd, plm::lag(dd$tratamiento, c(-3:3)[-4]))
+    dd <- as.data.frame(transform(dd)) 
+    
+    names(dd)[(length(dd) - 5):length(dd)] <- 
+    c("tratamiento_Lead_3", "tratamiento_Lead_2", 
+        "tratamiento_Lead_1", "tratamiento_Lag_1",
+          "tratamiento_Lag_2", "tratamiento_Lag_3") 
+
+    dd <- unfactor(dd)
+
+    dd[dd$treat == 0, 
+    c("tratamiento_Lead_3", "tratamiento_Lead_2", 
+        "tratamiento_Lead_1", "tratamiento_Lag_1", 
+          "tratamiento_Lag_2", "tratamiento_Lag_3")] <- 0
+```
+
+```{r}
+reg1 <- felm(outcome ~ tratamiento_Lead_3 + tratamiento_Lead_2 + 
+               tratamiento_Lead_1 + tratamiento + tratamiento_Lag_1 + 
+               tratamiento_Lag_2 + tratamiento_Lag_3 | unidades + tiempo | 0 | 
+               unidades, dd)
+
+table_leads_lags <- stargazer(reg1, header = FALSE, 
+                              font.size = "footnotesize", 
+                              dep.var.caption = "",
+                              label = "tab:tablaR", 
+                              dep.var.labels.include = FALSE, 
+                              table.placement = "H", 
+                              omit = c("Constant", "year", "unidades", "Lag"), 
+                              column.labels = "Outcome", 
+                              covariate.labels = c("Tratamiento Lead 3", 
+                                                   "Tratamiento Lead 2", 
+                                                   "Tratamiento Lead 1", 
+                                                   "Tratamiento"), 
+                              omit.stat = c("f", "ser","adj.rsq"), 
+                              add.lines = list(c("Outcome mean", 
+                                                 round(mean(dd$outcome),3)), 
+                                               c("Outcome std. Dev.",
+                                                 round(sd(dd$outcome),3)), 
+                                               c("Outcome min", 
+                                                 round(min(dd$outcome),3)), 
+                                               c("Outcome max", 
+                                                 round(max(dd$outcome),3)), 
+                                               c("Cluster", "unidades")), 
+                              title = "Leads and lags", type = "latex")
+```
+
+
