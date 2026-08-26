@@ -21,7 +21,8 @@ if(!require("pacman")){ #This way, we can run the code and it will not install i
 pacman::p_load(dplyr, #For data manipulation
                ggplot2,#For visualization
                this.path, #This allows us to get the path of the folder where this file is
-               fixest #This is for regressions
+               fixest, #This is for regressions
+               purrr #Discrete uniform distribution
                )
 
 #We set our working directory using the previous package
@@ -81,7 +82,7 @@ table(vector_4)
 
 #Example:
 
-name <- c("Luis", "Horacio", "Alexa", "Adrián", "Maria José")
+names <- c("Luis", "Horacio", "Alexa", "Adrián", "Maria José")
 
 major <- c("Economics", "Economics", "Political science", "Political science", "International Relationships")
 
@@ -161,7 +162,6 @@ only_grades<-school_panel %>%
   rename(student=name) #self explanatory
 
 #What if you have many datasets and you need info from them?
-names_2
 
 admin_data<-data.frame(
   name=c("Horacio","Celeste", "Alexa", "Adrián", "Maria José", "Pablo", "Daniela"),
@@ -219,7 +219,7 @@ school_panel=school_panel %>%
       TRUE~gpa)
   )
 
-#Plots -----------------------------------------------------------------------
+##Plots -----------------------------------------------------------------------
 summary(school_panel$gpa)
 
 #Density chart  
@@ -277,4 +277,45 @@ model2=feols(
 )
 
 etable(model1,model2)
+
+
+#Part 3: Functions and loops -------------------------------------------------------------
+
+#We use functions all the time, most of them are in packages made by someone else
+#But sometimes, it is useful to custom build them ourselves when we need to do something many times
+
+#Syntax
+
+function1= #name
+  function(a,b,c,d){ #parameters
+    result=(a+b-c)*d #What will it do with the parameters
+    return(result) #What will it return
+  } 
+
+function1(2,2,3,4)#We call it
+
+#For example, we may want to know whether our outcomes are correlated with gpa?
+
+gpa_plot=function(variable){
+  plot=ggplot(data=school_panel, aes(x=gpa,y=.data[[variable]])) +
+    geom_point() +
+    labs(x="GPA (scale 10)",y=variable, 
+         title=paste0("Correlation between GPA and ",variable)) +
+    theme_bw()
+  print(plot)
+    }
+
+gpa_plot("attendance")
+
+
+##Loops  ----------------------------------------------------------------------
+
+#Loops allow us to do the same thing a lot of times easily
+
+#For example, we can do gpa_plot for a lot of outcomes
+outcomes=c("attendance","difficulty","ability","gpa")
+
+for(i in outcomes){ #i is the counter, it goes over the list of outcomes 
+  gpa_plot(i)
+}
 
