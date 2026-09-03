@@ -14,6 +14,7 @@ Materials for the course Political Economy I (CSO-15041) imparted by professor H
 - Sample selection
 - Simple randomization
 - Balance testing
+- SUTVA violations
 
 ## Part 3: Difference-in-differences
 - Panel data
