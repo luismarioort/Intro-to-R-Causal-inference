@@ -4,9 +4,9 @@ Materials for the course Political Economy I (CSO-15041) imparted by professor H
 
 ---------------------------------------------------
 ## Part 1: Introduction to R
-- Data and cleaning
-- Plots and tables
-- Functions and loops
+- [Data and cleaning](1.%20Introduction_to_R.R)
+- [Plots and tables](1.%20Introduction_to_R.R)
+- [Functions and loops](1.%20Introduction_to_R.R)
 
 ## Part 2: Experiments
 - Fundamental problem of causal inference
