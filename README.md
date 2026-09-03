@@ -3,7 +3,8 @@
 Materials for the course Political Economy I (CSO-15041) imparted by professor Horacio Larreguy at ITAM (Fall 2026).
 
 ---------------------------------------------------
-## Part 1: [Introduction to R](1.%20Introduction_to_R.R)- [Data and cleaning](1.%20Introduction_to_R.R)
+## Part 1: [Introduction to R](1.%20Introduction_to_R.R)
+- Data and cleaning
 - Plots and tables
 - Functions and loops
 
