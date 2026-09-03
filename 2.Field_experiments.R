@@ -247,21 +247,3 @@ data_experiment = data_experiment %>%
 weird_dosage=feols(dosage_gpa~randomizr_treatment,data=data_experiment)
 etable(weird_dosage,spillovers,no_spillovers)
 
-##3. Partial equilibrium--------------------------------------------------------
-#We assume that treatment only affect those treated and does not have equilibrium effects
-#A weird example: what if teachers grade on a curve. Then, a group having better grades 
-
-#Suppose that the teacher standarizes so the mean is 8.5 and sd=1:
-
-data_experiment = data_experiment %>%
-  mutate(
-    curved_grades=(balanced_gpa-mean(balanced_gpa))/sd(balanced_gpa)+8.5,
-    curved_grades=case_when(
-      curved_grades>10~10,
-      curved_grades<6~6,
-      TRUE~curved_grades)
-    )
-
-curved=feols(curved_grades~randomizr_treatment,data=data_experiment)
-
-etable(curved,weird_dosage,spillovers,no_spillovers)
