@@ -24,7 +24,7 @@ Materials for the course Political Economy I (CSO-15041) imparted by professor H
 - Continuous treatment
 - Staggered intervention and modern estimators
 
-## Part 4: Instrumental variables
+## Part 4: [Instrumental variables](4.Instrumental_variables.R)
 - LATE
 - Assumption testing
 - 2SLS estimation
