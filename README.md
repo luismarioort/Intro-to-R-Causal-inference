@@ -29,7 +29,7 @@ Materials for the course Political Economy I (CSO-15041) imparted by professor H
 - Assumption testing
 - 2SLS estimation
 
-## Part 5: Regression discontinuity
+## Part 5: [Regression discontinuity](5.Regression_discontinuity.R)
 - LATE (again)
 - Assumption testing: McCrary and CCT
 - Plots
